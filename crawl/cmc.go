@@ -37,11 +37,28 @@ func ListCMCArticles(ctx context.Context, until time.Time) ([]Article, error) {
 			continue
 		}
 		log.Printf("sucessfully fetched page %d", page)
-		page++
+		page = page + 1
+		if len(articles) == 0 {
+			break
+		}
+		// Get the oldest article from this batch (last in the list since they're in reverse chronological order)
 		oldest = articles[len(articles)-1].CreatedAt
+
+		// Stop if we've reached articles older than the target
+		if !oldest.After(until) {
+			// Still process articles from this batch that are newer than 'until'
+			for _, articleOverview := range articles {
+				if articleOverview.CreatedAt.After(until) {
+					wg.Add(1)
+					go fetchArticle(articleOverview.Url, articleOverview.CreatedAt, client, articlesChannel, &wg)
+				}
+			}
+			break
+		}
+
 		for _, articleOverview := range articles {
 			wg.Add(1)
-			go fetchArticle(articleOverview.Url, client, articlesChannel, &wg)
+			go fetchArticle(articleOverview.Url, articleOverview.CreatedAt, client, articlesChannel, &wg)
 		}
 	}
 
@@ -60,10 +77,10 @@ func ListCMCArticles(ctx context.Context, until time.Time) ([]Article, error) {
 func fetchArticles(ctx context.Context, client *http.Client, page int) ([]ArticleOverview, error) {
 	articles := make([]ArticleOverview, 0, 20)
 	body, err := json.Marshal(map[string]any{
-		"mode":          "LATEST",
-		"pageCreatedAt": page,
-		"size":          20,
-		"language":      "en",
+		"mode":     "LATEST",
+		"page":     page,
+		"size":     20,
+		"language": "en",
 		"newsTypes": []string{
 			"NEWS",
 			"ALEXANDRIA",
@@ -113,7 +130,7 @@ func fetchArticles(ctx context.Context, client *http.Client, page int) ([]Articl
 	return articles, nil
 }
 
-func fetchArticle(url string, client *http.Client, channel chan Article, wg *sync.WaitGroup) {
+func fetchArticle(url string, from time.Time, client *http.Client, channel chan Article, wg *sync.WaitGroup) {
 	defer wg.Done()
 	r, err := client.Get(url)
 	if err != nil {
@@ -155,12 +172,12 @@ func fetchArticle(url string, client *http.Client, channel chan Article, wg *syn
 		content = articleDoc.Text()
 	}
 
-	log.Printf("%v crawled", title)
+	log.Printf("%v from %s crawled", title, from.Format(time.RFC3339))
 	channel <- Article{
 		Url:       url,
-		Title:     title,
-		Content:   content,
+		Title:     strings.TrimSpace(title),
+		Content:   strings.TrimSpace(content),
 		Assets:    assets,
-		CreatedAt: time.Now(),
+		CreatedAt: from,
 	}
 }
