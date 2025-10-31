@@ -95,7 +95,7 @@ func fetchArticles(ctx context.Context, client *http.Client, page int) ([]Articl
 				Title     string `json:"title"`
 				SourceUrl string `json:"sourceUrl"`
 			} `json:"meta"`
-			CreatedAt time.Time `json:"createdAt"`
+			CreatedAt string `json:"createdAt"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -103,9 +103,10 @@ func fetchArticles(ctx context.Context, client *http.Client, page int) ([]Articl
 	}
 
 	for _, item := range result.Data {
+		timestamp, _ := time.Parse(time.RFC3339, item.CreatedAt)
 		articles = append(articles, ArticleOverview{
 			Url:       item.Meta.SourceUrl,
-			CreatedAt: item.CreatedAt,
+			CreatedAt: timestamp,
 			Title:     item.Meta.Title,
 		})
 	}

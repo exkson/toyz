@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -26,13 +27,22 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	// empty slice
+	var jsonArticles []map[string]any
 	if articles, err := crawl.ListCMCArticles(ctx, until); err == nil {
 		for _, article := range articles {
-			fmt.Println(article.Url)
-			fmt.Println(article.Title)
-			fmt.Println(article.Assets)
-			fmt.Println(article.Content)
-			fmt.Println("-------------------------------------------------")
+			jsonArticles = append(jsonArticles, map[string]any{
+				"url":        article.Url,
+				"title":      article.Title,
+				"content":    article.Content,
+				"assets":     article.Assets,
+				"created_at": article.CreatedAt,
+			})
+			jsonBody, err := json.Marshal(jsonArticles)
+			if err != nil {
+				log.Fatalf("unable to dumps articles to json %v", err)
+			}
+			fmt.Println(string(jsonBody))
 		}
 	} else {
 		log.Fatal(err)
