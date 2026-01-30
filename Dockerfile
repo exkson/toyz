@@ -18,10 +18,10 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o toyz .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o toyz .
 
 # Stage 2: Runtime with Python
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 WORKDIR /crawl
 

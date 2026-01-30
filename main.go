@@ -25,26 +25,28 @@ func main() {
 		log.Fatal("--until should be a date in the past")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// Use a very long timeout for scraping large history
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Hour)
 	defer cancel()
-	// empty slice
-	var jsonArticles []map[string]any
-	if articles, err := crawl.ListCMCArticles(ctx, until); err == nil {
-		for _, article := range articles {
-			jsonArticles = append(jsonArticles, map[string]any{
-				"url":        article.Url,
-				"title":      article.Title,
-				"content":    article.Content,
-				"assets":     article.Assets,
-				"created_at": article.CreatedAt,
-			})
-			jsonBody, err := json.Marshal(jsonArticles)
-			if err != nil {
-				log.Fatalf("unable to dumps articles to json %v", err)
-			}
-			fmt.Println(string(jsonBody))
+
+	// Define callback to print article as JSON immediately
+	onArticle := func(article crawl.Article) {
+		jsonArticle := map[string]any{
+			"url":        article.Url,
+			"title":      article.Title,
+			"content":    article.Content,
+			"assets":     article.Assets,
+			"created_at": article.CreatedAt,
 		}
-	} else {
+		jsonBody, err := json.Marshal(jsonArticle)
+		if err != nil {
+			log.Printf("unable to dumps articles to json %v", err)
+			return
+		}
+		fmt.Println(string(jsonBody))
+	}
+
+	if err := crawl.ListCMCArticles(ctx, until, onArticle); err != nil {
 		log.Fatal(err)
 	}
 }

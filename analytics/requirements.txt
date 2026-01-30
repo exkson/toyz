@@ -1,0 +1,4 @@
+pyspark==3.5.0
+textblob
+psycopg2-binary
+tomli; python_version < "3.11"

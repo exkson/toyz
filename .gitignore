@@ -1,2 +1,51 @@
-/bin
-/specs
+# Binaries
+toyz
+*.exe
+*.dll
+*.so
+*.dylib
+bin/
+obj/
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+.Python
+env/
+venv/
+.venv/
+.env
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Go
+go.work
+go.exe
+vendor/
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker & Data
+postgres_data/
+kafka_data/
+zookeeper_data/
+*.log
+
+# Spark
+checkpoint/
+spark-warehouse/
+metastore_db/
+derby.log
+*.jar

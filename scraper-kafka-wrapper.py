@@ -26,13 +26,13 @@ class ScraperKafkaWrapper:
             key_serializer=lambda k: k.encode('utf-8'),
             acks='all',
             retries=3,
-            compression_type='snappy',
+            compression_type='gzip',
             linger_ms=10,
             batch_size=16384
         )
         
-        print(f"✅ Kafka producer initialized (brokers: {kafka_brokers})")
-        print(f"📤 Publishing to topic: {kafka_topic}")
+        print(f"INFO: Kafka producer initialized (brokers: {kafka_brokers})")
+        print(f"INFO: Publishing to topic: {kafka_topic}")
     
     def generate_article_id(self, title, url):
         """Generate unique ID for article"""
@@ -113,7 +113,7 @@ class ScraperKafkaWrapper:
             return article
             
         except json.JSONDecodeError as e:
-            print(f"⚠️  Failed to parse JSON: {e}")
+            print(f"WARN: Failed to parse JSON: {e}")
             return None
     
     def publish_article(self, article):
@@ -128,21 +128,21 @@ class ScraperKafkaWrapper:
             # Wait for confirmation (optional, can be async)
             record_metadata = future.get(timeout=10)
             
-            print(f"✅ Published: {article.get('title', 'Unknown')} "
+            print(f"INFO: Published: {article.get('title', 'Unknown')} "
                   f"[partition {record_metadata.partition}, offset {record_metadata.offset}]")
             
             return True
             
         except KafkaError as e:
-            print(f"❌ Kafka error: {e}")
+            print(f"ERROR: Kafka error: {e}")
             return False
         except Exception as e:
-            print(f"❌ Error publishing article: {e}")
+            print(f"ERROR: Error publishing article: {e}")
             return False
     
     def run_scraper_and_publish(self, scraper_command):
         """Run Go scraper and publish articles to Kafka"""
-        print(f"🚀 Starting scraper: {' '.join(scraper_command)}")
+        print(f"INFO: Starting scraper: {' '.join(scraper_command)}")
         print("=" * 60)
         
         articles_published = 0
@@ -176,29 +176,29 @@ class ScraperKafkaWrapper:
             process.wait()
             
             # Flush remaining messages
-            print("\n📊 Flushing remaining messages...")
+            print("\nINFO: Flushing remaining messages...")
             self.producer.flush(timeout=15)
             
             print("=" * 60)
-            print(f"✅ Scraping complete!")
-            print(f"📊 Total articles published: {articles_published}")
+            print(f"INFO: Scraping complete!")
+            print(f"INFO: Total articles published: {articles_published}")
             
             return process.returncode
             
         except KeyboardInterrupt:
-            print("\n⚠️  Interrupted by user")
+            print("\nWARN: Interrupted by user")
             process.terminate()
             self.producer.flush()
             return 1
         
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"ERROR: Error: {e}")
             return 1
     
     def close(self):
         """Close Kafka producer"""
         self.producer.close()
-        print("✅ Kafka producer closed")
+        print("INFO: Kafka producer closed")
 
 
 def main():
@@ -210,7 +210,7 @@ def main():
     scraper_cmd = os.getenv('SCRAPER_CMD', './toyz --until 2024-01-01T00:00:00Z')
     scraper_command = scraper_cmd.split()
     
-    print("🔧 Configuration:")
+    print("INFO: Configuration:")
     print(f"   Kafka Brokers: {kafka_brokers}")
     print(f"   Kafka Topic: {kafka_topic}")
     print(f"   Scraper Command: {scraper_cmd}")

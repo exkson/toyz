@@ -15,7 +15,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-func ListCMCArticles(ctx context.Context, until time.Time) ([]Article, error) {
+func ListCMCArticles(ctx context.Context, until time.Time, onArticle func(Article)) error {
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
@@ -27,34 +27,33 @@ func ListCMCArticles(ctx context.Context, until time.Time) ([]Article, error) {
 	page := 1
 	oldest := time.Now()
 
-	articlesChannel := make(chan Article)
 	var wg sync.WaitGroup
 
 	for oldest.After(until) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		articles, err := fetchArticles(ctx, client, page)
 		if err != nil {
 			log.Printf("[WARN] got %v on page %d", err, page)
-			continue
+			return err
 		}
 		log.Printf("sucessfully fetched page %d", page)
 		page++
+		if len(articles) == 0 {
+			break
+		}
 		oldest = articles[len(articles)-1].CreatedAt
 		for _, articleOverview := range articles {
 			wg.Add(1)
-			go fetchArticle(articleOverview.Url, client, articlesChannel, &wg)
+			go fetchArticle(articleOverview.Url, client, onArticle, &wg)
 		}
 	}
-
-	go func() {
-		wg.Wait()
-		close(articlesChannel)
-	}()
-
-	allArticles := make([]Article, 0)
-	for article := range articlesChannel {
-		allArticles = append(allArticles, article)
-	}
-	return allArticles, nil
+	wg.Wait()
+	return nil
 }
 
 func fetchArticles(ctx context.Context, client *http.Client, page int) ([]ArticleOverview, error) {
@@ -113,7 +112,7 @@ func fetchArticles(ctx context.Context, client *http.Client, page int) ([]Articl
 	return articles, nil
 }
 
-func fetchArticle(url string, client *http.Client, channel chan Article, wg *sync.WaitGroup) {
+func fetchArticle(url string, client *http.Client, onArticle func(Article), wg *sync.WaitGroup) {
 	defer wg.Done()
 	r, err := client.Get(url)
 	if err != nil {
@@ -156,11 +155,11 @@ func fetchArticle(url string, client *http.Client, channel chan Article, wg *syn
 	}
 
 	log.Printf("%v crawled", title)
-	channel <- Article{
+	onArticle(Article{
 		Url:       url,
 		Title:     title,
 		Content:   content,
 		Assets:    assets,
-		CreatedAt: time.Now(),
-	}
+		CreatedAt: time.Now(), // Should probably use overview CreatedAt, but that means passing it down. Okay for now.
+	})
 }
