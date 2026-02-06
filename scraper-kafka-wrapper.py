@@ -8,16 +8,20 @@ import subprocess
 import json
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 import hashlib
 import re
 
+# Fichier pour stocker la dernière date de scrape
+LAST_SCRAPE_FILE = '/data/last_scrape.txt'
+
 class ScraperKafkaWrapper:
     def __init__(self, kafka_brokers, kafka_topic):
         """Initialize Kafka producer"""
         self.kafka_topic = kafka_topic
+        self.latest_article_date = None
         
         # Initialize Kafka producer
         self.producer = KafkaProducer(
@@ -33,6 +37,33 @@ class ScraperKafkaWrapper:
         
         print(f"INFO: Kafka producer initialized (brokers: {kafka_brokers})")
         print(f"INFO: Publishing to topic: {kafka_topic}")
+    
+    def get_last_scrape_date(self):
+        """Récupère la date du dernier scrape depuis le fichier"""
+        try:
+            if os.path.exists(LAST_SCRAPE_FILE):
+                with open(LAST_SCRAPE_FILE, 'r') as f:
+                    date_str = f.read().strip()
+                    if date_str:
+                        print(f"INFO: Last scrape was at: {date_str}")
+                        return date_str
+        except Exception as e:
+            print(f"WARN: Could not read last scrape date: {e}")
+        
+        # Par défaut, scraper les dernières 24 heures
+        default_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        print(f"INFO: No previous scrape found, using default: {default_date}")
+        return default_date
+    
+    def save_last_scrape_date(self, date_str):
+        """Sauvegarde la date du dernier scrape"""
+        try:
+            os.makedirs(os.path.dirname(LAST_SCRAPE_FILE), exist_ok=True)
+            with open(LAST_SCRAPE_FILE, 'w') as f:
+                f.write(date_str)
+            print(f"INFO: Saved last scrape date: {date_str}")
+        except Exception as e:
+            print(f"ERROR: Could not save last scrape date: {e}")
     
     def generate_article_id(self, title, url):
         """Generate unique ID for article"""
@@ -96,12 +127,19 @@ class ScraperKafkaWrapper:
             if crypto_mentions:
                 article['crypto_mentions'] = crypto_mentions
             
-            # Ensure published_at is in ISO format
-            if 'published_at' in article:
-                # Try to parse and convert to ISO format
+            # Ensure published_at is in ISO format and track latest date
+            if 'created_at' in article:
+                article['published_at'] = article['created_at']
+                # Suivre la date la plus récente
+                try:
+                    article_date = datetime.fromisoformat(article['created_at'].replace('Z', '+00:00'))
+                    if self.latest_article_date is None or article_date > self.latest_article_date:
+                        self.latest_article_date = article_date
+                except:
+                    pass
+            elif 'published_at' in article:
                 try:
                     if isinstance(article['published_at'], str):
-                        # Already a string, keep as is
                         pass
                     else:
                         article['published_at'] = str(article['published_at'])
@@ -183,6 +221,11 @@ class ScraperKafkaWrapper:
             print(f"INFO: Scraping complete!")
             print(f"INFO: Total articles published: {articles_published}")
             
+            # Sauvegarder la date du dernier article pour le prochain scrape
+            if self.latest_article_date:
+                date_str = self.latest_article_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+                self.save_last_scrape_date(date_str)
+            
             return process.returncode
             
         except KeyboardInterrupt:
@@ -206,8 +249,22 @@ def main():
     kafka_brokers = os.getenv('KAFKA_BROKERS', 'localhost:9094')
     kafka_topic = os.getenv('KAFKA_TOPIC', 'crypto-news-raw')
     
-    # Scraper command
-    scraper_cmd = os.getenv('SCRAPER_CMD', './toyz --until 2024-01-01T00:00:00Z')
+    # Initialize wrapper
+    wrapper = ScraperKafkaWrapper(kafka_brokers, kafka_topic)
+    
+    # Récupérer la date du dernier scrape
+    last_scrape = wrapper.get_last_scrape_date()
+    
+    # Construire la commande du scraper avec la date
+    scraper_cmd = os.getenv('SCRAPER_CMD', f'./toyz --until {last_scrape}')
+    
+    # Si SCRAPER_CMD est fourni mais ne contient pas --until, on l'ajoute
+    if '--until' not in scraper_cmd:
+        scraper_cmd = f'./toyz --until {last_scrape}'
+    else:
+        # Remplacer la date dans la commande existante par la dernière date
+        scraper_cmd = f'./toyz --until {last_scrape}'
+    
     scraper_command = scraper_cmd.split()
     
     print("INFO: Configuration:")
@@ -215,9 +272,6 @@ def main():
     print(f"   Kafka Topic: {kafka_topic}")
     print(f"   Scraper Command: {scraper_cmd}")
     print()
-    
-    # Initialize wrapper
-    wrapper = ScraperKafkaWrapper(kafka_brokers, kafka_topic)
     
     try:
         # Run scraper and publish articles

@@ -39,6 +39,10 @@ RUN chmod +x ./toyz
 # Copy Python wrapper and requirements
 COPY scraper-kafka-wrapper.py ./
 COPY scraper-requirements.txt ./requirements.txt
+COPY run-scheduler.sh ./
+
+# Make scripts executable
+RUN chmod +x ./run-scheduler.sh
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -46,7 +50,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Environment variables (can be overridden)
 ENV KAFKA_BROKERS=kafka:9092
 ENV KAFKA_TOPIC=crypto-news-raw
-ENV SCRAPER_CMD="./toyz --until 2024-01-01T00:00:00Z"
 
 # Run the Python wrapper which launches the Go scraper
 CMD ["python", "scraper-kafka-wrapper.py"]

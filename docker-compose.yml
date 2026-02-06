@@ -44,7 +44,9 @@ services:
     environment:
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC: crypto-news-raw
-      SCRAPER_CMD: "./toyz --until 2026-01-29T00:00:00Z"
+    volumes:
+      - scraper-data:/data
+    command: /bin/bash /crawl/run-scheduler.sh
     networks:
       - cryptoviz-network
     restart: unless-stopped
@@ -104,6 +106,7 @@ services:
 
 volumes:
   postgres_data:
+  scraper-data:
 
 networks:
   cryptoviz-network:
